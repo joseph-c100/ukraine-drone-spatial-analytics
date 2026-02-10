@@ -40,6 +40,23 @@ nearest_distances <- st_distance(data_sf_projected, pop_projected)
 # Get the minimum distance for each attack (in meters)
 data_sf$dist_to_nearest_pop_km <- as.numeric(apply(nearest_distances, 1, min)) / 1000
 
+
+
+# Get the population of the nearest centre (same pattern as distance)
+data_sf$nearest_pop_size <- apply(nearest_distances, 1, function(x) {
+  pop_projected$POP_MAX[which.min(x)]
+})
+
+# Get the name of the nearest centre
+data_sf$nearest_pop_name <- apply(nearest_distances, 1, function(x) {
+  pop_projected$NAME[which.min(x)]
+})
+
+data_sf$pop_per_km <- data_sf$nearest_pop_size / (data_sf$dist_to_nearest_pop_km + 1)
+data_sf$pop_proximity_score <- log(data_sf$nearest_pop_size + 1) / log(data_sf$dist_to_nearest_pop_km + 1)
+
+
+
 # Create spatial weights matrix based on k-nearest neighbors
 coords <- st_coordinates(data_sf_projected)
 knn_weights <- knn2nb(knearneigh(coords, k = 10))  
@@ -47,7 +64,7 @@ knn_weights_list <- nb2listw(knn_weights, style = "W")
 
 
 
-local_moran <- localmoran(data_sf$dist_to_nearest_pop_km, knn_weights_list)
+local_moran <- localmoran(data_sf$pop_per_km, knn_weights_list)
 
 # Add results to your data
 data_sf$local_i <- local_moran[, "Ii"]  # Local Moran's I statistic
@@ -70,7 +87,7 @@ data_sf <- data_sf %>%
 # Plot
 local_moran_year_plot <- ggplot(data_sf) +
   geom_sf(aes(color = cluster_type), size = 0.1, alpha = 0.7) +
-  facet_wrap(vars(year)) +
+  #facet_wrap(vars(year)) +
   scale_color_manual(
     values = c(
       "High-High (Hot spot)" = "red",
@@ -82,11 +99,11 @@ local_moran_year_plot <- ggplot(data_sf) +
   ) +
   theme_minimal() +
   labs(
-    title = "Local Moran's I - Strike Distance to Population Centres",
+    title = "Local Moran's I - Strike Distance to Population Centres - Weighted by population",
     subtitle = "Hot spots = clusters of strikes close to cities, Cold spots = clusters far from cities",
     color = "Cluster Type"
   )
-ggsave("plots/local_moran_by_year.png", local_moran_year_plot, width = 12, height = 10)
+ggsave("plots/local_moran_by_year_popWeighted.png", local_moran_year_plot, width = 12, height = 10)
 
 
 
