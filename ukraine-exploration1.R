@@ -4,11 +4,13 @@ install.packages("sf")
 install.packages("ggplot2")
 install.packages("geojsonsf")
 install.packages("dplyr")
+install.packages("stringr")
 
 library(sf)
 library(ggplot2)
 library(geojsonsf)
 library(dplyr)
+library(stringr)
 
 #read acled data - Feb 2022 to Feb 2026 (drone and shelling)
 data <- read.csv("source-data/ACLED Data_2026-02-03.csv")
@@ -26,10 +28,17 @@ data_sf <- st_as_sf(data_filtered,
 populated_places <- read_sf("source-data/ne_10m_populated_places/ne_10m_populated_places.shp")
 populated_places_ukr <- populated_places %>% filter(ADM0_A3 == "UKR")
 
+#Ukraine Admin 1 boundaries geojson
+ukr_admn1 <- read_sf("source-data/ukraine-boundaries.geojson")
+ukr_admn1 <- ukr_admn1 %>% mutate(shapeName = word(shapeName, 1))
 
+#Read admin1 population data
+ukr_admn1_pop <- read.csv("source-data/ukr_admpop_adm1_2022.csv")
 
 # Write to GeoJSON
 st_write(data_sf, "source-data/acled_data_filtered.geojson", driver = "GeoJSON", append = TRUE)
+
+
 
 # Plot with ggplot2 - all years
 p1 <- ggplot(data_sf) +
@@ -50,6 +59,24 @@ ggsave("plots/strikes_by_year.png", p2, width = 12, height = 10)
 
 
 
+
+
+# Count strikes per admin1 region and year
+strike_counts <- data_sf %>%
+  st_drop_geometry() %>%  
+  group_by(admin1, year) %>%
+  summarise(count = n(), .groups = "drop")
+
+# Join strike counts and population to the boundaries
+ukr_strikes_pop <- ukr_admn1 %>%
+  mutate(shapeISO = str_remove(shapeISO, "-")) %>%
+  left_join(strike_counts, by = c("shapeName" = "admin1")) %>%
+  left_join(ukr_admn1_pop, by = c("shapeISO" = "ADM1_PCODE"))
+
+
+
+
+
 #spatial statistics
 #convert event_date to date format
 data_sf$event_date <- as.Date(data_sf$event_date)
@@ -63,7 +90,6 @@ p3 <- ggplot(data_sf) +
   theme_minimal() +
   labs(title = "Strikes")
 ggsave("plots/strikes_ellipse.png", p3, width = 10, height = 8)
-
 
 
 
